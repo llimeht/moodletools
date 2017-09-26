@@ -284,3 +284,58 @@ class Moodle:
             df_assessments.to_pickle(filename_assessments)
 
         return df_submissions, df_assessments
+
+    _forum_view_url = "mod/forum/view.php?id=%s"
+
+    def get_forum_threads(self, forum):
+        page = self._get_resource(
+            self.base_url + self._forum_view_url % forum,
+            None
+        )
+        bs = bs4.BeautifulSoup(page.text, 'lxml')
+
+        table = bs.find('table', class_='forumheaderlist')
+        posts = table.find_all('tr', class_='discussion')
+
+        data = []
+        for p in posts:
+            topiccell = p.find('td', class_='topic starter')
+            topic = topiccell.find('a').text
+            url = topiccell.find('a')['href']
+            groupcell = p.find('td', class_="picture group")
+            if groupcell.text:
+                groupname = groupcell.find('a').text
+            else:
+                groupname = None
+
+            data.append((topic, url, groupname))
+
+        return data
+
+    _forum_form_url = 'mod/forum/post.php?forum=%s'
+    _forum_post_url = 'mod/forum/post.php'
+
+    def post_to_forum(self, forum, subject, text, group=-1):
+
+        def _clean(payload):
+            for field in ['cancel', 'discussionsubscribe', 'mailnow',
+                          'mform_isexpanded_id_general', 'pinned',
+                          'posttomygroups']:
+                payload.pop(field, None)
+
+            # and also add the post to the payload
+            payload.update({
+                'subject': subject,
+                'message[text]': text,
+                'groupinfo': group,
+                'submitbutton': 'Post to forum',
+            })
+            return payload
+
+        return self._get_resource_preparation(
+            self.base_url + self._forum_form_url % forum,
+            self.base_url + self._forum_post_url,
+            _clean,
+            None,
+            form_name='mformforum'
+        )
