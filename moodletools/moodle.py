@@ -235,13 +235,16 @@ class Moodle:
                     b"<title>Error</title>" in dat:
                 bad_data = True
 
+        if not bad_data:
+            rawdf = pandas.read_excel(rawlogfilename)
+            if not len(rawdf):
+                bad_data = True
+
         if bad_data:
             df_submissions = pandas.DataFrame(columns=('Status', 'URL'))
             df_assessments = pandas.DataFrame(columns=('Marked', 'Assessor'))
 
         else:
-            rawdf = pandas.read_excel(rawlogfilename)
-
             submitted = rawdf[
                 rawdf['Event name'].str.startswith(
                     self._workshop_submitted_log_entry)]
