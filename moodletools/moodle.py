@@ -58,6 +58,18 @@ class Moodle:
     _gradebook_export_url = 'grade/export/xls/export.php'
 
     def get_gradebook(self, course, filename=None):
+        """ return a requests object with the course gradebook
+
+        course: course id number
+
+        filename: (optional) filename to save the gradebook spreadsheet
+
+        returns: requests object
+
+        Example:
+        gbdata = m.get_gradebook(12345)
+        gb = pandas.read_excel(gbdata.content)
+        """
         def _clean(payload):
             payload.pop("nosubmit_checkbox_controller1", None)
             return payload
