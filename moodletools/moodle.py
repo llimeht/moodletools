@@ -373,3 +373,22 @@ class Moodle:
             None
         )
         return page.text
+
+    _resource_hide_url = "course/mod.php?sesskey=%s&sr=0&hide=%s"
+
+    def hide_all(self, course):
+        page = self.get_course_page(course)
+        bs = bs4.BeautifulSoup(page.text, 'lxml')
+        sesskey = bs.find('input', {'name': 'sesskey'})['value']
+
+        div = bs.find('div', class_='course-content')
+        urls = [a['href'] for a in div.find_all('a')]
+
+        activity_id_re = re.compile('id=(\d+)')
+
+        ids = [m.group(1) for m in [activity_id_re.search(u) for u in urls]]
+
+        for id in ids:
+            self._get_resource(
+                self.base_url + self._resource_hide_url % (sesskey, id),
+                None)
