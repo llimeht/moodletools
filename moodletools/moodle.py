@@ -354,3 +354,13 @@ class Moodle:
             None,
             form_name='mformforum'
         )
+
+    _completion_summary_url = 'report/progress/index.php?course=%d&format=csv'
+
+    def get_activity_completion(self, course):
+        """ fetch the activity completion report as CSV """
+        page = self._get_resource(
+            self.base_url + self._completion_summary_url % course,
+            None
+        )
+        return page.text
