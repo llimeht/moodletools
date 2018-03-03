@@ -442,26 +442,58 @@ class Moodle:
 
     _file_download_url = "mod/resource/view.php?id=%s"
 
-    def get_file(self, resource_id):
-        """ fetch a file by its resource id """
+    def _get_file_helper(self, resource_id):
+
         page = self._get_resource(
             self.base_url + self._file_download_url % resource_id,
             None
         )
         # The resource URL should magically 303 across to the actual file
         if page.history and page.history[0].status_code == 303:
-            return page.content
+            return page, page.content
 
         # If it doesn't 303 to the actual file then there might be a download
-        # link to try; or perhaps it should use raise ValueError?
+        # link to try
         bs = bs4.BeautifulSoup(page.text, 'lxml')
 
         div = bs.find('div', class_='resourceworkaround')
-        link = div.find('a').href
 
-        page = self._get_resource(
-            link,
-            None
-        )
+        if div:   # it's a link to the resource
+            link = div.find('a').href
 
-        return link.content
+            page = self._get_resource(
+                link,
+                None
+            )
+            return page, page.content
+
+        # Perhaps it's an embedded object
+        obj = bs.find('object', id='resourceobject')
+        if obj:
+            link = obj['data']
+
+            page = self._get_resource(
+                link,
+                None
+            )
+            return page, page.content
+
+        raise ValueError("No idea how to get that resource")
+
+
+    def get_file(self, resource_id, save=False, filename=None):
+        """ fetch a file by its resource id """
+
+        page, content = self._get_file_helper(resource_id)
+
+        if save and not filename:
+            filename = re.findall("filename=(.+)",
+                                  page.headers['content-disposition'])[0]
+            if filename[0] == filename[-1] == '"':
+                filename = filename[1:-1]
+
+        if save and filename:
+            with open(filename, 'wb') as fh:
+                fh.write(content)
+
+        return content
