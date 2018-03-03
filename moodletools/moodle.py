@@ -383,24 +383,62 @@ class Moodle:
         )
         return page.text
 
-    _resource_hide_url = "course/mod.php?sesskey=%s&sr=0&hide=%s"
+    _resource_quick_url = "course/mod.php?sesskey={sesskey}&sr=0&{action}={id}"
 
-    def hide_all(self, course):
+    def _do_quick(self, courseid, resourceid, action):
+        """ run a quick link for a resource """
+        self._get_resource(
+            self.base_url + self._resource_quick_url.format(**{
+                'sesskey': self.sesskey(courseid),
+                'id': resourceid,
+                'action': action,
+            }),
+            None)
+
+    def _do_all_quick(self, courseid, types, action):
+        """ run a quick link for all resources of a certain type on the course page """
+        acts = self.list_all(courseid)
+
+        if types:
+            acts = [a for a in acts if a['type'] in types]
+
+        for a in acts:
+            self._do_quick(courseid, a['id'], action)
+
+        return acts
+
+    def hide_all(self, course, types=None):
+        """ hide all resources of a certain type on the course page """
+        return self._do_all_quick(course, types, 'hide')
+
+    def unhide_all(self, course, types=None):
+        """ unhide all resources of a certain type on the course page """
+        return self._do_all_quick(course, types, 'show')
+
+    def list_all(self, course, types=None):
         page = self.get_course_page(course)
         bs = bs4.BeautifulSoup(page.text, 'lxml')
-        sesskey = bs.find('input', {'name': 'sesskey'})['value']
 
         div = bs.find('div', class_='course-content')
-        urls = [a['href'] for a in div.find_all('a')]
+        urls = div.find_all('a')
 
-        activity_id_re = re.compile('id=(\d+)')
+        activity_link_re = re.compile('mod/([^/]+).*id=(\d+)')
 
-        ids = [m.group(1) for m in [activity_id_re.search(u) for u in urls]]
+        activities = []
+        for u in urls:
+            url = u['href']
+            m = activity_link_re.search(url)
+            act_type = m.group(1)
+            if act_type in types:
+                act_id = m.group(2)
+                activities.append({
+                    'url': url,
+                    'type': act_type,
+                    'id': act_id,
+                    'name': u.text,
+                })
 
-        for id in ids:
-            self._get_resource(
-                self.base_url + self._resource_hide_url % (sesskey, id),
-                None)
+        return activities
 
     _file_download_url = "mod/resource/view.php?id=%s"
 
