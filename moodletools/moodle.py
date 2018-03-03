@@ -20,6 +20,7 @@ class Moodle:
     def _get_resource_preparation(self, form_url, resource_url,
                                   payload_filter, filename,
                                   form_name='mform1'):
+        """ return a requests.Response object for a form submission """
         logger.debug("Fetching resource form: %s", form_url)
         response_form = self.session.get(form_url)
 
@@ -49,6 +50,7 @@ class Moodle:
         return response_resource
 
     def _get_resource(self, resource_url, filename):
+        """ return a requests.Response object for the requested URL """
         logger.debug("Fetching resource url: %s", resource_url)
 
         response_resource = self.session.get(resource_url)
@@ -70,7 +72,7 @@ class Moodle:
 
         filename: (optional) filename to save the gradebook spreadsheet
 
-        returns: requests object
+        returns: requests.Response object
 
         Example:
         gbdata = m.get_gradebook(12345)
@@ -90,6 +92,7 @@ class Moodle:
     _course_page_url = "course/view.php?id=%s"
 
     def get_course_page(self, course, filename=None):
+        """ return a requests.Response object for the course page """
         return self._get_resource(
             self.base_url + self._course_page_url % course,
             filename
