@@ -12,10 +12,16 @@ class Moodle:
     def __init__(self, base_url, session):
         self.base_url = base_url
         self.session = session
+        self._sesskey = None
 
         self.status_missing = "MISSING"
         self.status_submitted = "submitted"
         self.status_marked = "marked"
+
+    def sesskey(self, course):
+        if not self._sesskey:
+            self.get_course_page(course)
+        return self._sesskey
 
     def _get_resource_preparation(self, form_url, resource_url,
                                   payload_filter, filename,
@@ -93,10 +99,13 @@ class Moodle:
 
     def get_course_page(self, course, filename=None):
         """ return a requests.Response object for the course page """
-        return self._get_resource(
+        page = self._get_resource(
             self.base_url + self._course_page_url % course,
             filename
         )
+        bs = bs4.BeautifulSoup(page.text, 'lxml')
+        self._sesskey = bs.find('input', {'name': 'sesskey'})['value']
+        return page
 
     _assigment_form_url = "mod/assign/view.php?id=%s&action=grading" \
                           "&thide=plugin1&tifirst&tilast"
