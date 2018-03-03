@@ -3,6 +3,9 @@ import bs4
 import numpy
 import pandas
 import pandas.io.parsers
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Moodle:
@@ -17,6 +20,7 @@ class Moodle:
     def _get_resource_preparation(self, form_url, resource_url,
                                   payload_filter, filename,
                                   form_name='mform1'):
+        logger.debug("Fetching resource form: %s", form_url)
         response_form = self.session.get(form_url)
 
         # find all of the fields in the form to send back
@@ -45,10 +49,12 @@ class Moodle:
         return response_resource
 
     def _get_resource(self, resource_url, filename):
+        logger.debug("Fetching resource url: %s", resource_url)
 
         response_resource = self.session.get(resource_url)
 
         if filename is not None:
+            logger.debug("Caching resource to %s", filename)
             with open(filename, 'wb') as fh:
                 fh.write(response_resource.content)
 
