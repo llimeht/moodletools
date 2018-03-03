@@ -392,3 +392,29 @@ class Moodle:
             self._get_resource(
                 self.base_url + self._resource_hide_url % (sesskey, id),
                 None)
+
+    _file_download_url = "mod/resource/view.php?id=%s"
+
+    def get_file(self, resource_id):
+        """ fetch a file by its resource id """
+        page = self._get_resource(
+            self.base_url + self._file_download_url % resource_id,
+            None
+        )
+        # The resource URL should magically 303 across to the actual file
+        if page.history and page.history[0].status_code == 303:
+            return page.content
+
+        # If it doesn't 303 to the actual file then there might be a download
+        # link to try; or perhaps it should use raise ValueError?
+        bs = bs4.BeautifulSoup(page.text, 'lxml')
+
+        div = bs.find('div', class_='resourceworkaround')
+        link = div.find('a').href
+
+        page = self._get_resource(
+            link,
+            None
+        )
+
+        return link.content
