@@ -50,12 +50,24 @@ class Moodle:
             self.get_dashboard_page()
         return self._sesskey
 
-    def _set_sesskey(self, page):
+    def set_sesskey(self, page):
         """ opportunistically harvest the sesskey from the page """
         if self._sesskey:
             return
+
         bs = bs4.BeautifulSoup(page.text, 'lxml')
-        self._sesskey = bs.find('input', {'name': 'sesskey'})['value']
+
+        explicit = bs.find('input', {'name': 'sesskey'})
+        if explicit:
+            self._sesskey = explicit['value']
+            return
+
+        sesskey_re = re.compile("^https?://.*/.*sesskey=([^&]+)")
+        implicit = bs.find('a', {'href': sesskey_re})
+        if implicit:
+            match = sesskey_re.match(implicit['href'])
+            self._sesskey = match.group(1)
+            return
 
     _dashboard_page_url = "my/"
 
@@ -69,7 +81,7 @@ class Moodle:
             self._dashboard_page_url,
             filename
         )
-        self._set_sesskey(page)
+        self.set_sesskey(page)
         return page
 
     def course(self, course_id):
@@ -193,6 +205,38 @@ class Course:
         self.status_submitted = "submitted"
         self.status_marked = "marked"
 
+    def assignment(self, assignment_id):
+        """ create an Assignment object within this course
+
+        assignment_id: str or int
+            the id of the assignment activity
+        """
+        return Assignment(assignment_id, self)
+
+    def workshep(self, workshep_id):
+        """ create a Workshep (aka Workshop UNSW) object within this course
+
+        workshep_id: str or int
+            the id of the workshep activity
+        """
+        return Workshep(workshep_id, self)
+
+    def forum(self, forum_id):
+        """ create a Forum object within this course
+
+        forum_id: str or int
+            the id of the forum activity
+        """
+        return Workshep(forum_id, self)
+
+    def resource(self, resource_id):
+        """ create a File Resource object within this course
+
+        resource_id: str or int
+            the id of the file resource
+        """
+        return Resource(resource_id, self)
+
     _gradebook_form_url = "grade/export/xls/index.php?id=%s"
     _gradebook_export_url = 'grade/export/xls/export.php'
 
@@ -226,16 +270,211 @@ class Course:
             self._course_page_url % self.course_id,
             filename
         )
-        self.moodle._set_sesskey(page)
+        self.moodle.set_sesskey(page)
         return page
 
-    _assigment_form_url = "mod/assign/view.php?id=%s&action=grading" \
-                          "&thide=plugin1&tifirst&tilast"
-    _assigment_status_url = "mod/assign/view.php"
-    _assignment_next = 'Next'
+    _log_form_url = (
+        "report/log/index.php?"
+        "chooselog=1&"
+        "showusers=0&"
+        "showcourses=0&"
+        "id=%s&"         # course id
+        "user=&"
+        "date=&"
+        "modid=%s&"      # activity id
+        "modaction=c&"
+        "edulevel=-1&"
+        "logreader=logstore_standard")
 
-    def assignment_status_dataframes(self, activity, filename=None):
-        """ fetch assignment status information and clean it """
+    _log_export_url = (
+        "report/log/index.php?"
+        "id=%s&"         # course id
+        "modid=%s&"      # activity id
+        "modaction=c&"
+        "chooselog=1&"
+        "logreader=logstore_standard")
+
+    def get_logs(self, activity_id, filename=None):
+        """ fetch the logs for a specified activity
+
+        activity_id: int or str
+            id number of the activity
+        filename: str, optional
+            filename to which the download should be saved
+        """
+        def _clean(payload):
+            payload['download'] = "excel"
+            return payload
+
+        return self.moodle.fetch_from_form(
+            self._log_form_url % (self.course_id, activity_id),
+            self._log_export_url % (self.course_id, activity_id),
+            _clean,
+            filename,
+            form_name=None
+        )
+
+    _completion_summary_url = 'report/progress/index.php?course=%d&format=csv'
+
+    def get_activity_completion(self):
+        """ fetch the activity completion report as CSV """
+        page = self.moodle.fetch(
+            self._completion_summary_url % self.course_id,
+            None
+        )
+        return page.text
+
+    _resource_quick_url = "course/mod.php?sesskey={sesskey}&sr=0&{action}={id}"
+
+    def quick_action(self, resource_id, action):
+        """ run a quick link for a resource """
+        self.moodle.fetch(
+            self._resource_quick_url.format(**{
+                'sesskey': self.moodle.sesskey(),
+                'id': resource_id,
+                'action': action,
+            }),
+            None)
+
+    def quick_action_all(self, types, action):
+        """ run an action for all resources of a certain type
+
+        Iterate through the course page, running a specified 'quick link'
+        (such as "hide" or "show") for every resource on the course page
+        that is in the given list of resource types.
+
+        types: list, set, tuple
+            list of str of the types to be changed. Known types include
+            'resource', 'page', 'forum' etc; check the URL for a resource
+            for its name.
+        action: str
+            the action name as specified in the quick link
+
+        returns: list of CourseResource
+            the entries that were processed
+        """
+        acts = self.list_all(types)
+
+        for a in acts:
+            self.quick_action(a.id, action)
+
+        return acts
+
+    def hide_all(self, types=None):
+        """ hide all resources of a certain type on the course page
+
+        types: list of str, optional
+            list of Moodle resource type names that are to be hidden
+
+        returns: list of CourseResource
+            list of resource that were hidden
+        """
+        return self.quick_action_all(types, 'hide')
+
+    def unhide_all(self, types=None):
+        """ unhide all resources of a certain type on the course page
+
+        types: list of str, optional
+            list of Moodle resource type names that are to be unhidden
+
+        returns: list of CourseResource
+            list of resource that were unhidden
+        """
+        return self.quick_action_all(types, 'show')
+
+    def list_all(self, types=None):
+        """ list all resources that are shown on the course page
+
+        The list of resources can be filtered down to those matching the
+        specified resource types. The internal names for the types can be
+        discovered by looking at the URLs to the resources and includes
+        'resource' (a file), 'page', 'forum' etc.
+
+        types: list of str, optional
+            list of resources to include; if not specified or None, all
+            resources are listed.
+
+        returns: list of CourseResource
+            each resource is placed in the list as a CourseResource object
+        """
+        page = self.get_course_page()
+        bs = bs4.BeautifulSoup(page.text, 'lxml')
+
+        # find all the A anchors in the content part of the course page
+        # (excluding menus, side bars, theme etc); only links to resources
+        # are wanted, which are of form /mod/{resource name}/...id=XYZ
+        activity_link_re = re.compile(r'mod/([^/]+).*id=(\d+)')
+
+        div = bs.find('div', class_='course-content')
+        urls = div.find_all('a', attrs={'href': activity_link_re})
+
+        activities = []
+        for u in urls:
+            url = u['href']
+            match = activity_link_re.search(url)
+            act_type = match.group(1)
+            if types is None or act_type in types:
+                act_id = match.group(2)
+                activities.append(
+                    CourseResource(
+                        url,
+                        act_id,
+                        act_type,
+                        u.text,
+                    )
+                )
+
+        return activities
+
+
+CourseResource = collections.namedtuple(
+    'CourseResource',
+    [
+        'url',
+        'id',
+        'type',
+        'name',
+    ]
+)
+
+
+class AbstractResource:
+    """ Base class for File, Page, Forum etc resources within a course
+
+    Subclasses of this class would be instantiated by factory methods
+    within the Course class, for example:
+
+    >>> course = mymoodle.course(12345)
+    >>> assgt1 = course.assignment(2468)
+    """
+
+    def __init__(self, resource_id, course):
+        """ Create an object to work with activities in Moodle
+
+        resource_id: str or int
+            id of the resource
+        """
+        self.id = resource_id
+        self.course = course
+
+    def hide(self):
+        """ hide this resource from the course page """
+        self.course.quick_action(self.id, 'hide')
+
+    def unhide(self):
+        """ unhide (aka show) this resource from the course page """
+        self.course.quick_action(self.id, 'show')
+
+
+class Assignment(AbstractResource):
+    """ Class representing a single Assignment activity within a course """
+    _form_url = "mod/assign/view.php?id=%s&action=grading" \
+                "&thide=plugin1&tifirst&tilast"
+    _status_url = "mod/assign/view.php"
+    _next_page = 'Next'
+
+    def _get_status_dataframes(self, filename=None):
+        """ fetch a page of assignment status information and clean it """
         def _clean(payload):
             payload['perpage'] = "50"    # FIXME THIS IS ICKY
             payload['filter'] = ""
@@ -247,9 +486,9 @@ class Course:
 
         pagenum = 0
 
-        response = self.moodle.fetch_from_form(
-            self._assigment_form_url % activity,
-            self._assigment_status_url,
+        response = self.course.moodle.fetch_from_form(
+            self._form_url % self.id,
+            self._status_url,
             _clean,
             _filename()
         )
@@ -265,8 +504,7 @@ class Course:
 
             nexturl = None
             if paging:
-                nextlink = paging[0].find('a', href=True,
-                                          text=self._assignment_next)
+                nextlink = paging[0].find('a', href=True, text=self._next_page)
                 if nextlink:
                     nexturl = nextlink['href']
 
@@ -276,7 +514,7 @@ class Course:
                 raise StopIteration
 
             pagenum += 1
-            response = self.moodle.fetch(
+            response = self.course.moodle.fetch(
                 nexturl,
                 _filename()
             )
@@ -305,15 +543,14 @@ class Course:
 
         return df
 
-    def get_assignment_status(self, activity, filename=None):
+    def get_status(self, filename=None):
         """ obtain information about the status of an assignment activity """
-        df = pandas.concat(
-            self.assignment_status_dataframes(activity, filename))
+        df = pandas.concat(self._get_status_dataframes(filename))
 
-        df.loc[df['Status'].isnull(), 'Status'] = self.status_missing
+        df.loc[df['Status'].isnull(), 'Status'] = self.course.status_missing
         df['Status'].replace(
             [r"^No submission.*", r"^Submitted.*"],
-            [self.status_missing, self.status_submitted],
+            [self.course.status_missing, self.course.status_submitted],
             inplace=True, regex=True
         )
 
@@ -321,60 +558,25 @@ class Course:
             df.to_pickle(filename)
         return df
 
-    _log_form_url = (
-        "report/log/index.php?"
-        "chooselog=1&"
-        "showusers=0&"
-        "showcourses=0&"
-        "id=%s&"         # course id
-        "user=&"
-        "date=&"
-        "modid=%s&"      # activity id
-        "modaction=c&"
-        "edulevel=-1&"
-        "logreader=logstore_standard")
 
-    _log_export_url = (
-        "report/log/index.php?"
-        "id=%s&"         # course id
-        "modid=%s&"      # activity id
-        "modaction=c&"
-        "chooselog=1&"
-        "logreader=logstore_standard")
+class Workshep(AbstractResource):
+    """ class representing a Workshep (aka Workshop UNSW) activity
 
-    def fetch_logs(self, activity_id, filename=None):
-        """ fetch the logs for a specified activity
+    Note: Workshep is not a misspelling; that's what it is called inside the
+    Moodle code to distinguish it from the pre-existing "Workshop" activity.
+    """
+    _submitted_log_entry = r"A submission has been uploaded"
+    _assessed_log_entry = r"Submission assessed"
+    _url_log_entry = r"The user with id '(?P<userid>\d+)' .+ " \
+        r"'(?P<subid>\d+)' .+ '(?P<cmid>\d+)'"
+    _submission_url = "{base}mod/workshep/submission.php?" \
+        "cmid={cmid}&id={subid}"
 
-        activity_id: int or str
-            id number of the activity
-        filename: str, optional
-            filename to which the download should be saved
-        """
-        def _clean(payload):
-            payload['download'] = "excel"
-            return payload
-
-        return self.moodle.fetch_from_form(
-            self._log_form_url % (self.course_id, activity_id),
-            self._log_export_url % (self.course_id, activity_id),
-            _clean,
-            filename,
-            form_name=None
-        )
-
-    _workshop_submitted_log_entry = r"A submission has been uploaded"
-    _workshop_assessed_log_entry = r"Submission assessed"
-    _workshop_url_log_entry = r"The user with id '(?P<userid>\d+)' .+ " \
-                              r"'(?P<subid>\d+)' .+ '(?P<cmid>\d+)'"
-    _workshop_submission_url = "{base}mod/workshep/submission.php?" \
-                               "cmid={cmid}&id={subid}"
-
-    def get_workshop_status(self, activity,
-                            filename_submissions, filename_assessments):
+    def get_status(self, filename_submissions, filename_assessments):
         """ obtain status data on a Workshop (UNSW) aka workshep activity """
         # FIXME: replace horrendous log parsing with a proper data export
         rawlogfilename = filename_submissions + ".xlsx"
-        self.fetch_logs(activity, rawlogfilename)
+        self.course.get_logs(self.id, rawlogfilename)
 
         # moodle can return a weird HTML error rather than an empty
         # spreadsheet so detect that and bail out early
@@ -397,21 +599,21 @@ class Course:
         else:
             submitted = rawdf[
                 rawdf['Event name'].str.startswith(
-                    self._workshop_submitted_log_entry)]
+                    self._submitted_log_entry)]
             submitted_users = submitted['User full name'].unique()
 
             urls = submitted['Description'].str.extract(
-                self._workshop_url_log_entry, expand=True)
+                self._url_log_entry, expand=True)
 
             # There has to be a better way of applying a format in pandas
             def make_urls(row):
                 """ make the URL to the submission based on known data """
                 mapping = {
-                    'base': self.moodle.base_url,
+                    'base': self.course.moodle.base_url,
                     'cmid': row['cmid'],
                     'subid': row['subid'],
                     }
-                url = self._workshop_submission_url.format(**mapping)
+                url = self._submission_url.format(**mapping)
                 return url
 
             urls['URL'] = urls.apply(make_urls, axis=1, raw=False)
@@ -423,7 +625,7 @@ class Course:
             urls.set_index('Name', inplace=True)
 
             assessed = rawdf[
-                rawdf['Event name'] == self._workshop_assessed_log_entry]
+                rawdf['Event name'] == self._assessed_log_entry]
             assessed = assessed.rename(columns={
                 'User full name': 'Assessor',
                 'Affected user': 'Name',
@@ -435,14 +637,14 @@ class Course:
 
             df_submissions = pandas.DataFrame(columns=('Status', ),
                                               index=users)
-            df_submissions['Status'] = self.status_missing
+            df_submissions['Status'] = self.course.status_missing
             df_submissions.loc[submitted_users, 'Status'] = \
-                self.status_submitted
+                self.course.status_submitted
             df_submissions = df_submissions.join(urls)
 
             df_assessments = pandas.DataFrame(assessed['Assessor'],
                                               columns=('Assessor',))
-            df_assessments['Marked'] = self.status_marked
+            df_assessments['Marked'] = self.course.status_marked
 
         if filename_submissions:
             df_submissions.to_pickle(filename_submissions)
@@ -451,12 +653,21 @@ class Course:
 
         return df_submissions, df_assessments
 
-    _forum_view_url = "mod/forum/view.php?id=%s"
 
-    def get_forum_threads(self, forum_id):
+class Forum(AbstractResource):
+    """ Class to represent a Forum within a course
+
+    No distinction is made (at this stage!) between the different types of
+    forum that are available in Moodle.
+    """
+    _view_url = "mod/forum/view.php?id=%s"
+    _form_url = 'mod/forum/post.php?forum=%s'
+    _post_url = 'mod/forum/post.php'
+
+    def get_threads(self):
         """ obtain the threads in the current forum """
-        page = self.moodle.fetch(
-            self._forum_view_url % forum_id,
+        page = self.course.moodle.fetch(
+            self._view_url % self.id,
             None
         )
         bs = bs4.BeautifulSoup(page.text, 'lxml')
@@ -479,17 +690,12 @@ class Course:
 
         return data
 
-    _forum_form_url = 'mod/forum/post.php?forum=%s'
-    _forum_post_url = 'mod/forum/post.php'
-
-    def post_to_forum(self, forum_id, subject, text, group=-1):
+    def post(self, subject, text, group=-1):
         """ post a message to a forum
 
         The message can be targeted to a specific group within a "Separate
         Groups" forum if desired.
 
-        forum_id: str or int
-            id of the forum resource
         subject: str
             subject field for the forum post
         text: str
@@ -514,141 +720,28 @@ class Course:
             })
             return payload
 
-        return self.moodle.fetch_from_form(
-            self._forum_form_url % forum_id,
-            self._forum_post_url,
+        return self.course.moodle.fetch_from_form(
+            self._form_url % self.id,
+            self._post_url,
             _clean,
             None,
             form_name='mformforum'
         )
 
-    _completion_summary_url = 'report/progress/index.php?course=%d&format=csv'
 
-    def get_activity_completion(self):
-        """ fetch the activity completion report as CSV """
-        page = self.moodle.fetch(
-            self._completion_summary_url % self.course_id,
-            None
-        )
-        return page.text
+class Resource(AbstractResource):
+    """ Class representing a File (aka Resource) within a course """
 
-    _resource_quick_url = "course/mod.php?sesskey={sesskey}&sr=0&{action}={id}"
+    _download_url = "mod/resource/view.php?id=%s"
 
-    def _do_quick(self, resource_id, action):
-        """ run a quick link for a resource """
-        self.moodle.fetch(
-            self._resource_quick_url.format(**{
-                'sesskey': self.moodle.sesskey(),
-                'id': resource_id,
-                'action': action,
-            }),
-            None)
-
-    def _do_all_quick(self, types, action):
-        """ run an action for all resources of a certain type
-
-        Iterate through the course page, running a specified 'quick link'
-        (such as "hide" or "show") for every resource on the course page
-        that is in the given list of resource types.
-
-        types: list, set, tuple
-            list of str of the types to be changed. Known types include
-            'resource', 'page', 'forum' etc; check the URL for a resource
-            for its name.
-        action: str
-            the action name as specified in the quick link
-
-        returns: list of CourseResource
-            the entries that were processed
-        """
-        acts = self.list_all(types)
-
-        #if types:
-            #acts = [a for a in acts if a['type'] in types]
-
-        for a in acts:
-            self._do_quick(a.id, action)
-
-        return acts
-
-    def hide_all(self, types=None):
-        """ hide all resources of a certain type on the course page
-
-        types: list of str, optional
-            list of Moodle resource type names that are to be hidden
-
-        returns: list of CourseResource
-            list of resource that were hidden
-        """
-        return self._do_all_quick(types, 'hide')
-
-    def unhide_all(self, types=None):
-        """ unhide all resources of a certain type on the course page
-
-        types: list of str, optional
-            list of Moodle resource type names that are to be unhidden
-
-        returns: list of CourseResource
-            list of resource that were unhidden
-        """
-        return self._do_all_quick(types, 'show')
-
-    def list_all(self, types=None):
-        """ list all resources that are shown on the course page
-
-        The list of resources can be filtered down to those matching the
-        specified resource types. The internal names for the types can be
-        discovered by looking at the URLs to the resources and includes
-        'resource' (a file), 'page', 'forum' etc.
-
-        types: list of str, optional
-            list of resources to include; if not specified or None, all
-            resources are listed.
-
-        returns: list of CourseResource
-            each resource is placed in the list as a CourseResource object
-        """
-        page = self.get_course_page()
-        bs = bs4.BeautifulSoup(page.text, 'lxml')
-
-        # find all the A anchors in the content part of the course page
-        # (excluding menus, side bars, theme etc)
-        div = bs.find('div', class_='course-content')
-        urls = div.find_all('a')
-
-        # links to resources are /mod/{resource name}/...id=XYZ
-        activity_link_re = re.compile(r'mod/([^/]+).*id=(\d+)')
-
-        activities = []
-        for u in urls:
-            url = u['href']
-            m = activity_link_re.search(url)
-            act_type = m.group(1)
-            if types is None or act_type in types:
-                act_id = m.group(2)
-                activities.append(
-                    CourseResource(
-                        url,
-                        act_id,
-                        act_type,
-                        u.text,
-                    )
-                )
-
-        return activities
-
-    _file_download_url = "mod/resource/view.php?id=%s"
-
-    def _get_file_helper(self, resource_id):
+    def _get_file_helper(self):
         """ try various ways of extracting a resource
 
         The resource may be a direct link, a referring link or embedded
         within frames.
-
-        resource_id: str or int
         """
-        page = self.moodle.fetch(
-            self._file_download_url % resource_id,
+        page = self.course.moodle.fetch(
+            self._download_url % self.id,
             None
         )
         # The resource URL should magically 303 across to the actual file
@@ -664,7 +757,7 @@ class Course:
         if div:   # it's a link to the resource
             link = div.find('a').href
 
-            page = self.moodle.fetch(
+            page = self.course.moodle.fetch(
                 link,
                 None
             )
@@ -675,7 +768,7 @@ class Course:
         if obj:
             link = obj['data']
 
-            page = self.moodle.fetch(
+            page = self.course.moodle.fetch(
                 link,
                 None
             )
@@ -683,11 +776,9 @@ class Course:
 
         raise ValueError("No idea how to get that resource")
 
-    def get_file(self, resource_id, save=False, filename=None):
-        """ fetch a file by its resource id
+    def get(self, save=False, filename=None):
+        """ fetch a file from the resource
 
-        resource_id: str or int
-            identifier of the file resource to download
         save: bool
             save the file once downloaded
         filename: str
@@ -699,29 +790,19 @@ class Course:
         returns:
             file contents (binary), filename
         """
-        page, content = self._get_file_helper(resource_id)
+        page, content = self._get_file_helper()
 
-        # Generate the filename if it is require but has not been specified.
-        if save and not filename:
+        # Record the server specified filename
+        if not filename:
             filename = re.findall("filename=(.+)",
                                   page.headers['content-disposition'])[0]
             if filename[0] == filename[-1] == '"':
                 filename = filename[1:-1]
-            logger.info("Server specified filename in use: %s", filename)
+            if save:
+                logger.info("Server specified filename in use: %s", filename)
 
         if save and filename:
             with open(filename, 'wb') as fh:
                 fh.write(content)
 
         return content, filename
-
-
-CourseResource = collections.namedtuple(
-    'CourseResource',
-    [
-        'url',
-        'id',
-        'type',
-        'name',
-    ]
-)
