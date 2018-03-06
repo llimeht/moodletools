@@ -9,7 +9,7 @@ mymoodle = login_as_teacher()
 from moodletools.auth.generic import Generic, login_factory
 
 
-class DemoMoodleNetAuth(Generic):
+class DemoMoodleNet(Generic):
     """ Authentication and login class for demo.moodle.net """
     def __init__(self):
         super().__init__()
@@ -31,10 +31,10 @@ class DemoMoodleNetAuth(Generic):
         return super().connect(mode, roles[mode])
 
 
-login_as_admin = login_factory(DemoMoodleNetAuth(), mode='admin')
+login_as_admin = login_factory(DemoMoodleNet(), mode='admin')
 
-login_as_manager = login_factory(DemoMoodleNetAuth(), mode='manager')
+login_as_manager = login_factory(DemoMoodleNet(), mode='manager')
 
-login_as_teacher = login_factory(DemoMoodleNetAuth(), mode='teacher')
+login_as_teacher = login_factory(DemoMoodleNet(), mode='teacher')
 
-login_as_student = login_factory(DemoMoodleNetAuth(), mode='student')
+login_as_student = login_factory(DemoMoodleNet(), mode='student')
