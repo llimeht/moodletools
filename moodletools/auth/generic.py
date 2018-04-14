@@ -10,6 +10,7 @@ import requests
 
 import moodletools.moodle
 
+
 class Generic:
     """ Generic authentication to a Moodle installation
 
