@@ -237,6 +237,7 @@ class Assignment(AbstractResource):
             '.*First name.*Surname.*': 'Name',
             'Username.*': 'Username',
             'Status.*': 'Status',
+            'Grade.*': 'Grade',
         }
 
         for oldname, newname in mapping.items():
@@ -244,14 +245,20 @@ class Assignment(AbstractResource):
                 cols[i] = re.sub(oldname, newname, colname)
 
         df.columns = cols
-        df = df[['Name', 'Username', 'Status']]
         df = df.set_index('Username')
 
         return df
 
-    def get_status(self, filename=None):
+    def _fetch_status_data(self):
+        if self.status is None:
+            df = pandas.concat(self._get_status_dataframes())
+            self.status = df
+        return self.status
+
+    def get_submission_status(self):
         """ obtain information about the status of an assignment activity """
-        df = pandas.concat(self._get_status_dataframes(filename))
+        df = self._fetch_status_data()
+        df = df[['Name', 'Status']].copy()
 
         df.loc[df['Status'].isnull(), 'Status'] = self.course.status_missing
         df['Status'].replace(
@@ -260,8 +267,24 @@ class Assignment(AbstractResource):
             inplace=True, regex=True
         )
 
-        if filename is not None:
-            df.to_pickle(filename)
+        return df
+
+    def get_grades(self):
+        """ obtain information about grades in an assignment activity
+
+        Note that the grade in the assignment might be different to
+        the grade in the gradebook due to the marking workflow (grades not
+        yet released) or due to moderation by a Team Evaluation plugin.
+        """
+        df = self._fetch_status_data()
+        df = df[['Name', 'Grade', 'Final grade']].copy()
+
+        gradere = re.compile(r'Grade(\d+(.\d+)?).*')
+
+        # raw grade column is "GradeXX / YY"
+        df['Grade'] = pandas.to_numeric(
+            df.Grade.str.replace(gradere, lambda m: m.group(1)))
+
         return df
 
 
