@@ -234,7 +234,7 @@ class Assignment(AbstractResource):
         cols = list(df.columns)
 
         mapping = {
-            'First name.*Surname.*': 'Name',
+            '.*First name.*Surname.*': 'Name',
             'Username.*': 'Username',
             'Status.*': 'Status',
         }
