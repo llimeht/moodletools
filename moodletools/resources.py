@@ -183,6 +183,7 @@ class Assignment(AbstractResource):
         def _clean(payload):
             payload['perpage'] = "50"    # FIXME THIS IS ICKY
             payload['filter'] = ""
+            payload['workflowfilter'] = ""
             return payload
 
         def _filename():
