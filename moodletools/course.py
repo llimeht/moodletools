@@ -16,6 +16,7 @@ import numpy
 import pandas
 
 from moodletools import resources
+from moodletools.utils import resid_factory
 
 
 logger = logging.getLogger(__name__)
@@ -107,10 +108,10 @@ class Course:
     _gradebook_form_url = "grade/export/xls/index.php?id=%s"
     _gradebook_export_url = 'grade/export/xls/export.php'
 
-    def get_gradebook(self, filename=None):
+    def get_gradebook(self, resid='auto'):
         """ return a requests object with the course gradebook
 
-        filename: (optional) filename to save the gradebook spreadsheet
+        resid: (optional) name in the on-disk cache
 
         returns: requests.Response object
 
@@ -126,16 +127,16 @@ class Course:
             self._gradebook_form_url % self.id,
             self._gradebook_export_url,
             _clean,
-            filename
+            resid_factory(self, resid, "course-gradebook-{id}")
         )
 
     _course_page_url = "course/view.php?id=%s"
 
-    def get_course_page(self, filename=None):
+    def get_course_page(self, resid='auto'):
         """ return a requests.Response object for the course page """
         page = self.moodle.fetch(
             self._course_page_url % self.id,
-            filename
+            resid_factory(self, resid, "course-page-{id}")
         )
         self.moodle.set_sesskey(page)
         return page
@@ -161,13 +162,13 @@ class Course:
         "chooselog=1&"
         "logreader=logstore_standard")
 
-    def get_logs(self, activity_id, filename=None):
+    def get_logs(self, activity_id, resid='auto'):
         """ fetch the logs for a specified activity
 
         activity_id: int or str
             id number of the activity
-        filename: str, optional
-            filename to which the download should be saved
+        resid: str, optional
+            resource id for on-disk cache
         """
         def _clean(payload):
             payload['download'] = "excel"
@@ -177,7 +178,7 @@ class Course:
             self._log_form_url % (self.id, activity_id),
             self._log_export_url % (self.id, activity_id),
             _clean,
-            filename,
+            resid_factory(self, resid, "course-logs-{id}"),
             form_name=None
         )
 

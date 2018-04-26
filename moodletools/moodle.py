@@ -35,6 +35,7 @@ import re
 import bs4
 
 from moodletools.course import Course
+from moodletools.utils import (Cacher, CacheMissError, resid_factory)
 
 
 logger = logging.getLogger(__name__)
@@ -72,6 +73,9 @@ class Moodle:
         self.base_url = base_url
         self.session = session
         self._sesskey = None
+        self.cache_max_age = 1800
+        self.cache = 'cache'
+        self.payload = True
 
     def sesskey(self):
         """ return the sesskey for the session """
@@ -100,15 +104,19 @@ class Moodle:
 
     _dashboard_page_url = "my/"
 
-    def get_dashboard_page(self, filename=None):
+    def get_dashboard_page(self, resid='auto'):
         """ return a requests.Response object for the site dashboard page
 
-        filename: str, optional
-            save the dashboard html to the filename
+        resid: str, optional, default `auto`
+            The resource id in the cache; if set to `auto`, the
+            value `course-dashboard-{id}` will be used. `None`
+            disables caching.
         """
+        resid = resid_factory(self, resid, "course-dashboard-{id}")
+
         page = self.fetch(
             self._dashboard_page_url,
-            filename
+            resid
         )
         self.set_sesskey(page)
         return page
@@ -130,7 +138,7 @@ class Moodle:
         return self.base_url + path
 
     def fetch_from_form(self, form_path, resource_path,
-                        payload_filter, filename=None, files=None,
+                        payload_filter, resid=None, files=None,
                         form_name='mform1'):
         """ return a requests.Response object for a form submission
 
@@ -144,71 +152,77 @@ class Moodle:
         payload_filter: callable
             function to filter the dict of form data from the initial form
             prior to the submission
-        filename: str, optional
-            filename into which the returned data should be saved
+        resid: str, optional
+            resource id for on-disk caching (default, None, disables
+            the cache)
         files: list
-            TODO: list of file objects to be uploaded as part of the form
+            dict of file objects to be uploaded as part of the form
             submission
         form_name: str, optional
             the form 'name' (or 'id') tag to find the correct form within the
             HTML
         """
-        form_url = self.url(form_path)
-        resource_url = self.url(resource_path)
+        cache = self.cache_factory(resid)
+        try:
+            return cache.load()
 
-        logger.debug("Fetching resource form: %s", form_url)
-        response_form = self.session.get(form_url)
+        except CacheMissError:
 
-        # find all of the fields in the form to send back
-        soup = bs4.BeautifulSoup(response_form.text, "html.parser")
-        if form_name is not None:
-            form = soup.find(id=form_name)
-        else:
-            form = soup.find("form")
+            form_url = self.url(form_path)
+            resource_url = self.url(resource_path)
 
-        payload = {}
+            logger.debug("Fetching resource form: %s", form_url)
+            response_form = self.session.get(form_url)
 
-        inputs = form.find_all('input')
-        for i in inputs:
-            n = i.get('name')
-            v = i.get('value')
-            if v is not None and v != '':
-                payload[n] = v
+            # find all of the fields in the form to send back
+            soup = bs4.BeautifulSoup(response_form.text, "html.parser")
+            if form_name is not None:
+                form = soup.find(id=form_name)
+            else:
+                form = soup.find("form")
 
-        textareas = form.find_all('textarea')
-        for t in textareas:
-            n = t.get('name')
-            v = t.contents
-            payload[n] = v[0] if len(v) else ""
+            payload = {}
 
-        payload = payload_filter(payload)
+            inputs = form.find_all('input')
+            for i in inputs:
+                n = i.get('name')
+                v = i.get('value')
+                if v is not None and v != '':
+                    payload[n] = v
 
-        response_resource = self.session.post(
-            resource_url, data=payload, files=files)
+            textareas = form.find_all('textarea')
+            for t in textareas:
+                n = t.get('name')
+                v = t.contents
+                payload[n] = v[0] if len(v) else ""
 
-        if filename is not None:
-            with open(filename, 'wb') as fh:
-                fh.write(response_resource.content)
+            payload = payload_filter(payload)
 
-        return response_resource
+            response_resource = self.session.post(
+                resource_url, data=payload, files=files)
 
-    def fetch(self, resource_path, filename=None):
+            cache.save(response_resource)
+            return response_resource
+
+    def fetch(self, resource_path, resid=None):
         """ return a requests.Response object for the requested URL
 
         resource_path: str
             the URL path on the current host or the absolute url to be fetch
-        filename: str, optional
-            the filename to use saving the download to disk
-            (`None` disables caching)
+        resid: str, optional
+            resource id for caching to disk (`None` disables caching)
         """
-        resource_url = self.url(resource_path)
-        logger.debug("Fetching resource url: %s", resource_url)
+        cache = self.cache_factory(resid)
+        try:
+            return cache.load()
 
-        response_resource = self.session.get(resource_url)
+        except CacheMissError:
+            resource_url = self.url(resource_path)
+            logger.debug("Fetching resource url: %s", resource_url)
 
-        if filename is not None:
-            logger.debug("Caching resource to %s", filename)
-            with open(filename, 'wb') as fh:
-                fh.write(response_resource.content)
+            response_resource = self.session.get(resource_url)
+            cache.save(response_resource)
+            return response_resource
 
-        return response_resource
+    def cache_factory(self, resid):
+        return Cacher(resid, self.payload, self.cache, self.cache_max_age)

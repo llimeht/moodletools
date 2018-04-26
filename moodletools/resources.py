@@ -178,7 +178,13 @@ class Assignment(AbstractResource):
     _status_url = "mod/assign/view.php"
     _next_page = 'Next'
 
-    def _get_status_dataframes(self, filename=None):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.status = None
+        self._html_status_cache = "assignment-{id}-{page}"
+        self._status_cache = "assignment-{id}-{page}"
+
+    def _get_status_dataframes(self):
         """ fetch a page of assignment status information and clean it """
         def _clean(payload):
             payload['perpage'] = "50"    # FIXME THIS IS ICKY
@@ -186,9 +192,12 @@ class Assignment(AbstractResource):
             payload['workflowfilter'] = ""
             return payload
 
-        def _filename():
-            if filename:
-                return filename + str(pagenum) + ".html"
+        def _resid():
+            if self._html_status_cache:
+                return self._html_status_cache.format_map({
+                    'id': self.id,
+                    'page': pagenum,
+                })
 
         pagenum = 0
 
@@ -196,7 +205,7 @@ class Assignment(AbstractResource):
             self._form_url % self.id,
             self._status_url,
             _clean,
-            _filename()
+            _resid()
         )
 
         # process the table on each page in turn
@@ -222,7 +231,7 @@ class Assignment(AbstractResource):
             pagenum += 1
             response = self.course.moodle.fetch(
                 nexturl,
-                _filename()
+                _resid()
             )
 
     @staticmethod
