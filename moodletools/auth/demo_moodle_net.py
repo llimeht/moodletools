@@ -18,6 +18,7 @@ class DemoMoodleNet(Generic):
         self.login_url = self.url + "login/index.php"
 
     def connect(self, *args, mode='teacher'):
+        # pylint: disable=unused-argument, arguments-differ
         """ login to the sandbox with the defined mode """
         roles = {
             'admin': 'sandbox',
