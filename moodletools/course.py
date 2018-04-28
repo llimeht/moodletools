@@ -5,6 +5,7 @@
 # Copyright (c) 2015-2018 Stuart Prescott
 
 import collections
+import io
 import logging
 import os
 import os.path
@@ -105,30 +106,9 @@ class Course:
         """
         return resources.Resource(resource_id, self)
 
-    _gradebook_form_url = "grade/export/xls/index.php?id=%s"
-    _gradebook_export_url = 'grade/export/xls/export.php'
-
-    def get_gradebook(self, resid='auto'):
-        """ return a requests object with the course gradebook
-
-        resid: (optional) name in the on-disk cache
-
-        returns: requests.Response object
-
-        Example:
-        gbdata = m.get_gradebook(12345)
-        gb = pandas.read_excel(gbdata.content)
-        """
-        def _clean(payload):
-            payload.pop("nosubmit_checkbox_controller1", None)
-            return payload
-
-        return self.moodle.fetch_from_form(
-            self._gradebook_form_url % self.id,
-            self._gradebook_export_url,
-            _clean,
-            resid_factory(self, resid, "course-gradebook-{id}")
-        )
+    def gradebook(self):
+        """ create the Greadebook object within this course """
+        return Gradebook(self)
 
     _course_page_url = "course/view.php?id=%s"
 
@@ -319,6 +299,89 @@ class Course:
                 activity = self.activity(row['Id'])
                 activity.set_release_date(row['Release ts'])
 
+
+class Gradebook:
+
+    _gradebook_form_url = "grade/export/xls/index.php?id=%s"
+    _gradebook_export_url = 'grade/export/xls/export.php'
+
+    def __init__(self, course):
+        self.course = course
+        self.resid = 'auto'
+        self.dataframe = None
+        self.summary_fields = [
+            'First name',
+            'Surname',
+            'Email address',
+        ]
+
+    def fetch(self):
+        """ return a requests object with the course gradebook
+
+        resid: (optional) name in the on-disk cache
+
+        returns: requests.Response object
+
+        Example:
+        gb = mycourse.gradebook()
+        gbdata = pandas.read_excel(gb.fetch().content)
+        """
+        def _clean(payload):
+            payload.pop("nosubmit_checkbox_controller1", None)
+            return payload
+
+        return self.course.moodle.fetch_from_form(
+            self._gradebook_form_url % self.course.id,
+            self._gradebook_export_url,
+            _clean,
+            resid_factory(self.course, self.resid, "course-gradebook-{id}")
+        )
+
+    def as_dataframe(self, fillna=True, cache=True):
+        if self.dataframe is not None and cache:
+            return self.dataframe
+
+        resp = self.fetch()
+
+        gb = pandas.read_excel(
+            io.BytesIO(resp.content),
+            engine='xlrd',
+            na_values=['-'],
+            keep_default_na=True,
+        )
+        gb.set_index('Username', inplace=True)
+
+        # cache the dataframe for potential future use
+        self.dataframe = gb
+
+        if fillna:
+            grade_columns = self.columns(real=True, percentage=True)
+            gb[grade_columns] = gb[grade_columns].fillna(0)
+
+        return gb
+
+    def as_dataframe_summary(self, real=True, percentage=False, letter=False):
+        gb = self.as_dataframe()
+
+        cols = self.summary_fields.copy()
+        cols.extend(self.columns(real, percentage, letter))
+        return gb.loc[:, cols]
+
+    def columns(self, real=True, percentage=False, letter=False):
+        gb = self.as_dataframe(fillna=False, cache=True)
+
+        cols = []
+        if real:
+            cols.append('Real')
+        if percentage:
+            cols.append('Percentage')
+        if letter:
+            cols.append('Letter')
+
+        colre = re.compile(r'\((%s)\)$' % '|'.join(cols))
+
+        cols = [c for c in gb.columns if colre.search(c)]
+        return cols
 
 CourseResource = collections.namedtuple(
     'CourseResource',
