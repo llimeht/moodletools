@@ -136,7 +136,7 @@ class AbstractResource:
                 date_restrs = [r for r in restr['c'] if r['type'] == 'date']
                 if len(date_restrs) > 1:
                     logger.error("Can't handle multiple date restrictions")
-                    return
+                    return {}
 
                 # Look for an existing date restriction and update it
                 for term in restr['c']:
@@ -198,6 +198,7 @@ class Assignment(AbstractResource):
                     'id': self.id,
                     'page': pagenum,
                 })
+            return None
 
         pagenum = 0
 

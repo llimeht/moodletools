@@ -33,7 +33,7 @@ class Cacher:
 
     def _cache_ok(self):
         if not self.name:
-            return
+            return False
 
         try:
             mtime = os.path.getmtime(self._cache_filename())
