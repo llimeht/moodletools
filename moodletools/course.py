@@ -383,6 +383,7 @@ class Gradebook:
         cols = [c for c in gb.columns if colre.search(c)]
         return cols
 
+
 CourseResource = collections.namedtuple(
     'CourseResource',
     [
