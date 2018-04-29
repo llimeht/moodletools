@@ -113,10 +113,22 @@ class Course:
     _course_page_url = "course/view.php?id=%s"
 
     def get_course_page(self, resid='auto'):
-        """ return a requests.Response object for the course page """
+        """ return a requests.Response object for the course page
+
+        :param resid: the resource id for caching the download. Note that
+            since the login session key is extracted from this page,
+            pulling from the cache is automatically disabled if the
+            session key is not yet set.
+
+        :returns: a requests response object with the data
+        """
+        resid = resid_factory(self, "course-page-{id}", resid)
+        force = not self.moodle.has_sesskey
+
         page = self.moodle.fetch(
             self._course_page_url % self.id,
-            resid_factory(self, resid, "course-page-{id}")
+            resid=resid,
+            force=force,
         )
         self.moodle.set_sesskey(page)
         return page
@@ -158,7 +170,7 @@ class Course:
             self._log_form_url % (self.id, activity_id),
             self._log_export_url % (self.id, activity_id),
             _clean,
-            resid_factory(self, resid, "course-logs-{id}"),
+            resid_factory(self, "course-logs-{id}", resid),
             form_name=None
         )
 
@@ -315,10 +327,11 @@ class Gradebook:
             'Email address',
         ]
 
-    def fetch(self):
+    def fetch(self, force=False):
         """ return a requests object with the course gradebook
 
-        resid: (optional) name in the on-disk cache
+        force: bool, optional, default `False`
+            forces redownload of the resource
 
         returns: requests.Response object
 
@@ -334,7 +347,8 @@ class Gradebook:
             self._gradebook_form_url % self.course.id,
             self._gradebook_export_url,
             _clean,
-            resid_factory(self.course, self.resid, "course-gradebook-{id}")
+            resid_factory(self.course, "course-gradebook-{id}", self.resid),
+            force=force,
         )
 
     def as_dataframe(self, fillna=True, cache=True):

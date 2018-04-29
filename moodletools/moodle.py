@@ -83,6 +83,10 @@ class Moodle:
             self.get_dashboard_page()
         return self._sesskey
 
+    @property
+    def has_sesskey(self):
+        return self._sesskey is not None
+
     def set_sesskey(self, page):
         """ opportunistically harvest the sesskey from the page """
         if self._sesskey:
@@ -107,16 +111,23 @@ class Moodle:
     def get_dashboard_page(self, resid='auto'):
         """ return a requests.Response object for the site dashboard page
 
-        resid: str, optional, default `auto`
+        :param resid: str, optional, default `auto`
             The resource id in the cache; if set to `auto`, the
             value `course-dashboard-{id}` will be used. `None`
             disables caching.
+        :param force: bool, optional, default `False`.
+            Forces redownload of the resource.
+            Note that if the login session key has not yet been extracted
+            from the session, requesting redownload will be forced in
+            any case.
         """
-        resid = resid_factory(self, resid, "course-dashboard-{id}")
+        resid = resid_factory(self, "course-dashboard-{id}", resid)
+        force = not self.has_sesskey
 
         page = self.fetch(
             self._dashboard_page_url,
-            resid
+            resid=resid,
+            force=force,
         )
         self.set_sesskey(page)
         return page
@@ -138,7 +149,7 @@ class Moodle:
         return self.base_url + path
 
     def fetch_from_form(self, form_path, resource_path,
-                        payload_filter, resid=None, files=None,
+                        payload_filter, resid=None, force=False, files=None,
                         form_name='mform1'):
         """ return a requests.Response object for a form submission
 
@@ -155,6 +166,8 @@ class Moodle:
         resid: str, optional
             resource id for on-disk caching (default, None, disables
             the cache)
+        force: bool, optional
+            force re-download of the resource rather than loading from cache
         files: list
             dict of file objects to be uploaded as part of the form
             submission
@@ -162,7 +175,7 @@ class Moodle:
             the form 'name' (or 'id') tag to find the correct form within the
             HTML
         """
-        cache = self.cache_factory(resid)
+        cache = self.cache_factory(resid, force)
         try:
             return cache.load()
 
@@ -204,15 +217,17 @@ class Moodle:
             cache.save(response_resource)
             return response_resource
 
-    def fetch(self, resource_path, resid=None):
+    def fetch(self, resource_path, resid=None, force=False):
         """ return a requests.Response object for the requested URL
 
         resource_path: str
             the URL path on the current host or the absolute url to be fetch
         resid: str, optional
             resource id for caching to disk (`None` disables caching)
+        force: bool, optional
+            if `True`, forces redownload of the resource, bypassing the cache.
         """
-        cache = self.cache_factory(resid)
+        cache = self.cache_factory(resid, force)
         try:
             return cache.load()
 
@@ -224,5 +239,7 @@ class Moodle:
             cache.save(response_resource)
             return response_resource
 
-    def cache_factory(self, resid):
-        return Cacher(resid, self.payload, self.cache, self.cache_max_age)
+    def cache_factory(self, resid, force):
+        return Cacher(resid, self.payload,
+                      self.cache, self.cache_max_age,
+                      force)
