@@ -23,3 +23,15 @@ Usage of these tools is governed by the terms of service of the web services
 you may connect to and institutional policies.
 
 The code itself is available under the MIT licence.
+
+## Installation
+
+The code is written for Python 3.
+
+The following Python modules are required (Debian/Ubuntu packages):
+
+ * bs4 (python3-bs4)
+ * numpy (python3-numpy)
+ * pandas (python3-pandas)
+ * requests (python3-requests)
+ * xlrd (python3-xlrd)
