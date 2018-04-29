@@ -227,7 +227,8 @@ class Assignment(AbstractResource):
             yield self._parse_html_status(table)
 
             if nexturl is None:
-                raise StopIteration
+                # end of the iteration over the pages
+                return
 
             pagenum += 1
             response = self.course.moodle.fetch(
