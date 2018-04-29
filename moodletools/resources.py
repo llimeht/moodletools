@@ -352,7 +352,7 @@ class Workshep(AbstractResource):
 
         if not bad_data:
             rawdf = pandas.read_excel(rawlogfilename)
-            if not len(rawdf):
+            if not len(rawdf):   # pylint: disable=len-as-condition
                 bad_data = True
 
         if bad_data:
