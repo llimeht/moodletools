@@ -184,8 +184,13 @@ class Assignment(AbstractResource):
         self._html_status_cache = "assignment-{id}-{page}"
         self._status_cache = "assignment-{id}-{page}"
 
-    def _get_status_dataframes(self):
-        """ fetch a page of assignment status information and clean it """
+    def _get_status_dataframes(self, force=False):
+        """ fetch a page of assignment status information and clean it
+
+        :param force: bool, optional, default False
+            force the data to be fetched from the server rather than using
+            cached data
+        """
         def _clean(payload):
             payload['perpage'] = "50"    # FIXME THIS IS ICKY
             payload['filter'] = ""
@@ -206,7 +211,8 @@ class Assignment(AbstractResource):
             self._form_url % self.id,
             self._status_url,
             _clean,
-            _resid()
+            _resid(),
+            force=force,
         )
 
         # process the table on each page in turn
@@ -233,7 +239,8 @@ class Assignment(AbstractResource):
             pagenum += 1
             response = self.course.moodle.fetch(
                 nexturl,
-                _resid()
+                _resid(),
+                force=force,
             )
 
     @staticmethod
@@ -260,15 +267,26 @@ class Assignment(AbstractResource):
 
         return df
 
-    def _fetch_status_data(self):
-        if self.status is None:
-            df = pandas.concat(self._get_status_dataframes())
+    def _fetch_status_data(self, force=False):
+        """ fetch assignment status information from the grading view
+
+        :param force: bool, optional, default False
+            force the data to be fetched from the server rather than using
+            cached data
+        """
+        if self.status is None or force:
+            df = pandas.concat(self._get_status_dataframes(force))
             self.status = df
         return self.status
 
-    def get_submission_status(self):
-        """ obtain information about the status of an assignment activity """
-        df = self._fetch_status_data()
+    def get_submission_status(self, force=False):
+        """ obtain information about the status of an assignment activity
+
+        :param force: bool, optional, default False
+            force the data to be fetched from the server rather than using
+            cached data
+        """
+        df = self._fetch_status_data(force)
         df = df[['Name', 'Status']].copy()
 
         df.loc[df['Status'].isnull(), 'Status'] = self.course.status_missing
@@ -280,14 +298,18 @@ class Assignment(AbstractResource):
 
         return df
 
-    def get_grades(self):
+    def get_grades(self, force=False):
         """ obtain information about grades in an assignment activity
+
+        :param force: bool, optional, default False
+            force the data to be fetched from the server rather than using
+            cached data
 
         Note that the grade in the assignment might be different to
         the grade in the gradebook due to the marking workflow (grades not
         yet released) or due to moderation by a Team Evaluation plugin.
         """
-        df = self._fetch_status_data()
+        df = self._fetch_status_data(force)
         df = df[['Name', 'Grade', 'Final grade']].copy()
 
         gradere = re.compile(r'Grade(\d+(.\d+)?).*')
