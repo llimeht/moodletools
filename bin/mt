@@ -1,0 +1,110 @@
+#!/usr/bin/python3
+
+""" Command line tools for the moodletools suite
+
+"""
+
+# Copyright (c) 2017-2018 Stuart Prescott
+
+import argparse
+import logging
+
+import moodletools
+import moodletools.commands
+
+
+logger = logging.getLogger(__name__)
+
+
+def main():
+    """ Dispatch command line arguments """
+
+    parser = argparse.ArgumentParser(
+        description="%(prog)s works with a remote Moodle installation "
+                    "to upload, download or configure course information.",
+        epilog="")
+
+    # Common options for all commands
+    parser.add_argument(
+        '--version',
+        action='version',
+        version='%%(prog)s %s' % moodletools.__version__,
+    )
+
+    group_noise = parser.add_mutually_exclusive_group()
+    group_noise.add_argument(
+        '--debug',
+        dest="loglevel", action='store_const',
+        const=logging.DEBUG, default=logging.WARNING,
+        help='print debug information about operations',
+    )
+
+    group_noise.add_argument(
+        '-v', '--verbose',
+        dest="loglevel", action='store_const',
+        const=logging.INFO,
+        help='print more verbose information about operations',
+    )
+
+    parser.add_argument(
+        '--course', metavar='ID', type=int,
+        help='course id number',
+    )
+
+    parser.add_argument(
+        '--config', metavar='CONFIG_FILE', type=argparse.FileType('r'),
+        help='configuration file to load (otherwise auto-discovery is used)',
+    )
+
+    parser.add_argument(
+        '--no-cache',
+        action='store_true',
+        help='ignore currently cached files and always fetch from the server',
+    )
+
+    parser.add_argument(
+        '--disable-cache',
+        action='store_true',
+        help='disable both reading and writing to the on-disk cache',
+    )
+
+    # Subcommands
+    subparsers = parser.add_subparsers(
+        title='commands',
+        description='A sub-command must be given to specify the desired '
+                    'action. Run "%(prog)s command --help" to see '
+                    'information about each command.',
+        help='sub-command help',
+        dest='command',
+    )
+    subparsers.required = True    # move to kwarg for python 3.7
+
+    moodletools.commands.add_gradebook_parser(subparsers)
+    moodletools.commands.add_course_page_parser(subparsers)
+    moodletools.commands.add_assignment_parser(subparsers)
+    moodletools.commands.add_database_parser(subparsers)
+    # moodletools.commands.add_forum_parser(subparsers)  # UNTESTED
+    moodletools.commands.add_label_parser(subparsers)
+    moodletools.commands.add_page_parser(subparsers)
+    moodletools.commands.add_resource_parser(subparsers)   # UNTESTED
+    # moodletools.commands.add_workshep_parser(subparsers)  # UNTESTED
+
+    args = parser.parse_args()
+
+    logging.basicConfig(level=args.loglevel)
+
+    if args.config:
+        config = moodletools.config.MtConfig.from_stream(args.config)
+    else:
+        config = moodletools.config.auto_configure()
+
+    # merge command line options with config
+    config.cache_settings(args.no_cache, args.disable_cache)
+    if args.course:
+        config.course = args.course
+
+    args.subcommand(args, config)
+
+
+if __name__ == '__main__':
+    main()
