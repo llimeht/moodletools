@@ -1,0 +1,9 @@
+---
+site:
+    login: 'moodletools.auth.demo_moodle_net:login_as_teacher'
+
+cache:
+    force: False
+    location: cache
+
+course: {}
