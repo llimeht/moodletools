@@ -79,15 +79,9 @@ def main():
     )
     subparsers.required = True    # move to kwarg for python 3.7
 
-    moodletools.commands.Gradebook(subparsers)
-    moodletools.commands.CoursePage(subparsers)
-    moodletools.commands.Assignment(subparsers)
-    moodletools.commands.Database(subparsers)
-    # moodletools.commands.Forum(subparsers)  # UNTESTED
-    moodletools.commands.Label(subparsers)
-    moodletools.commands.Page(subparsers)
-    moodletools.commands.Resource(subparsers)   # UNTESTED
-    # moodletools.commands.Workshep(subparsers)  # UNTESTED
+    command_classes = moodletools.commands.AbstractCommand.__subclasses__()
+    for cls in sorted(command_classes, key=lambda t: t.__name__):
+        cls(subparsers)
 
     args = parser.parse_args()
 
