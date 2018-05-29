@@ -81,8 +81,13 @@ class Cacher:
         otherwise download the resource.
         """
         if not self.force and self._cache_ok():
-            with open(self._cache_filename(), 'rb') as fh:
+            filename = self._cache_filename()
+            logger.debug("Looking for %s in cache", filename)
+            with open(filename, 'rb') as fh:
                 return pickle.load(fh)
+        else:
+            logger.debug("No cache")
+
         raise CacheMissError
 
     def save(self, response):
@@ -92,6 +97,7 @@ class Cacher:
         response any payload can be saved into separate files.
         """
         if not self.enabled:
+            logger.debug("Cache disabled, not saving")
             return
 
         filename = self._cache_payload_filename()

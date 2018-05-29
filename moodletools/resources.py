@@ -4,8 +4,9 @@
 
 # Copyright (c) 2015-2018 Stuart Prescott
 
-import logging
+import io
 import json
+import logging
 import re
 
 import bs4
