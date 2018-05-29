@@ -322,6 +322,97 @@ class Assignment(AbstractResource):
         return df
 
 
+class Database(AbstractResource):
+    """ Class representing a single Database activity within a course """
+    _export_form_url = "mod/data/export.php?d=%s"
+    _export_url = "mod/data/export.php?d=%s"
+
+    #def __init__(self, *args, **kwargs):
+        #super().__init__(*args, **kwargs)
+
+    def _data_export_helper(self, fmt='ods', force=False):
+        """ fetch the database information
+
+        :param force: bool, optional, default False
+            force the data to be fetched from the server rather than using
+            cached data
+        """
+        def _clean(payload):
+            for field in ['cancel',
+                          'nosubmit_checkbox_controller1',
+                          'mform_isexpanded_id_notice',
+                         ]:
+                payload.pop(field, None)
+
+            payload['exporttype'] = fmt
+            return payload
+
+        response = self.course.moodle.fetch_from_form(
+            self._export_form_url % self.id,
+            self._export_url % self.id,
+            _clean,
+            "database-export-%s-%s" % (fmt, self.id),
+            force=force,
+        )
+        return response, response.content
+
+
+    def export(self, save=False, filename=None, fmt='csv', force=False):
+        """ fetch a file from the resource
+
+        :param save: bool
+            save the file once downloaded
+        :param filename: str, optional
+            filename into which the downloaded resource should be saved. If
+            the filename not specified but `save` is `True` then the server
+            specified filename will be used in the current directory. Be
+            very careful not to overwrite resources with this!
+        :param fmt: str, optional, default 'csv'
+            export format, must be one of 'csv', 'ods', 'xlsx'
+        :param force: bool, optional, default False
+            force the data to be fetched from the server rather than using
+            cached data
+
+        returns:
+            file contents (binary), filename
+        """
+        if fmt == 'xlsx':
+            page, content = self._data_export_helper('csv', force)
+            db = self._as_dataframe(content)
+            db.to_excel(filename)
+        elif fmt in ['ods', 'csv']:
+            page, content = self._data_export_helper(fmt, force)
+            filename = _negotiate_filename(page, filename, save)
+
+            if save and filename:
+                with open(filename, 'wb') as fh:
+                    fh.write(content)
+        else:
+            raise ValueError("Unknown format %s" % fmt)
+
+        return content, filename
+
+    def as_dataframe(self, force=False):
+        """ fetch the database as a pandas.DataFrame
+
+        :param force: bool, optional, default False
+            force the data to be fetched from the server rather than using
+            cached data
+
+        returns:
+            pandas.DataFrame of the database data
+        """
+        _, content = self._data_export_helper('csv', force)
+        return self._as_dataframe(content)
+
+    @staticmethod
+    def _as_dataframe(content):
+        db = pandas.read_csv(
+            io.BytesIO(content),
+        )
+        return db
+
+
 class Label(AbstractResource):
     """ Class representing a single Page resource within a course """
     _mod_name = 'label'
@@ -578,14 +669,7 @@ class Resource(AbstractResource):
         """
         page, content = self._get_file_helper()
 
-        # Record the server specified filename
-        if not filename:
-            filename = re.findall("filename=(.+)",
-                                  page.headers['content-disposition'])[0]
-            if filename[0] == filename[-1] == '"':
-                filename = filename[1:-1]
-            if save:
-                logger.info("Server specified filename in use: %s", filename)
+        filename = _negotiate_filename(page, filename, save)
 
         if save and filename:
             with open(filename, 'wb') as fh:
@@ -610,3 +694,19 @@ class Resource(AbstractResource):
         files[self.id] = self.id
         # FIXME
         raise NotImplementedError()
+
+
+def _negotiate_filename(page, filename, save):
+    """ return the server specified filename if one has not been specified """
+    if filename:
+        logger.debug("Filename specified: %s", filename)
+        return filename
+
+    filename = re.findall("filename=(.+)",
+                          page.headers['content-disposition'])[0]
+    if filename[0] == filename[-1] == '"':
+        filename = filename[1:-1]
+    if save:
+        logger.info("Server specified filename in use: %s", filename)
+
+    return filename

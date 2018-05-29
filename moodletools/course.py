@@ -66,6 +66,14 @@ class Course:
         """
         return resources.Assignment(assignment_id, self)
 
+    def database(self, database_id):
+        """ create an Database object within this course
+
+        database_id: str or int
+            the id of the database activity
+        """
+        return resources.Database(database_id, self)
+
     def page(self, page_id):
         """ create a Page object within this course
 
