@@ -351,8 +351,8 @@ class Gradebook:
             force=force,
         )
 
-    def as_dataframe(self, fillna=True, cache=True):
-        if self.dataframe is not None and cache:
+    def as_dataframe(self, fillna=True, force=False):
+        if self.dataframe is not None and not force:
             return self.dataframe
 
         resp = self.fetch()
@@ -382,7 +382,7 @@ class Gradebook:
         return gb.loc[:, cols]
 
     def columns(self, real=True, percentage=False, letter=False):
-        gb = self.as_dataframe(fillna=False, cache=True)
+        gb = self.as_dataframe(fillna=False, force=False)
 
         cols = []
         if real:
