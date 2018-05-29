@@ -79,15 +79,15 @@ def main():
     )
     subparsers.required = True    # move to kwarg for python 3.7
 
-    moodletools.commands.add_gradebook_parser(subparsers)
-    moodletools.commands.add_course_page_parser(subparsers)
-    moodletools.commands.add_assignment_parser(subparsers)
-    moodletools.commands.add_database_parser(subparsers)
-    # moodletools.commands.add_forum_parser(subparsers)  # UNTESTED
-    moodletools.commands.add_label_parser(subparsers)
-    moodletools.commands.add_page_parser(subparsers)
-    moodletools.commands.add_resource_parser(subparsers)   # UNTESTED
-    # moodletools.commands.add_workshep_parser(subparsers)  # UNTESTED
+    moodletools.commands.Gradebook(subparsers)
+    moodletools.commands.CoursePage(subparsers)
+    moodletools.commands.Assignment(subparsers)
+    moodletools.commands.Database(subparsers)
+    # moodletools.commands.Forum(subparsers)  # UNTESTED
+    moodletools.commands.Label(subparsers)
+    moodletools.commands.Page(subparsers)
+    moodletools.commands.Resource(subparsers)   # UNTESTED
+    # moodletools.commands.Workshep(subparsers)  # UNTESTED
 
     args = parser.parse_args()
 
