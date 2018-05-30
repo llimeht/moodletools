@@ -7,6 +7,7 @@
 import collections
 import glob
 import importlib
+import io
 import logging
 import os.path
 
@@ -16,9 +17,22 @@ import yaml
 logger = logging.getLogger(__name__)
 
 
-def auto_configure(start_directory=os.path.curdir, levels=2, home=True):
+def auto_start(config):
+    """ Connect to Moodle and create the course using command-line/config"""
+    logging.info("Logging into Moodle")
+    call = config.login_callable()
+    moodle = call()
+    moodle.cache = config.cache_location
+    course = moodle.course(config.course)
+    return moodle, course
+
+
+def auto_configure(start_directory=os.path.curdir, levels=2, home=True, local=None):
     filenames = find_config_filenames(start_directory, levels, home)
-    return MtConfig.from_filenames(filenames)
+    conf = MtConfig.from_filenames(filenames)
+    if local:
+        conf.merge(MtConfig.load_stream(io.StringIO(local)))
+    return conf
 
 
 def find_config_filenames(start_directory=os.path.curdir, levels=2, home=True):
@@ -78,7 +92,7 @@ class MtConfig:
         filename = os.path.join(os.path.dirname(__file__),
                                 'defaultconfig.yaml')
         with open(filename) as fh:
-            conf = self._from_stream(fh)
+            conf = self.load_stream(fh)
         self.data = conf
 
     @classmethod
@@ -87,7 +101,7 @@ class MtConfig:
         conf.load_default()
         for filename in reversed(filenames):
             with open(filename) as fh:
-                newconf = cls._from_stream(fh)
+                newconf = cls.load_stream(fh)
             conf.merge(newconf)
         return conf
 
@@ -100,11 +114,11 @@ class MtConfig:
     def from_stream(cls, stream):
         conf = cls()
         conf.load_default()
-        conf.merge(cls._from_stream(stream))
+        conf.merge(cls.load_stream(stream))
         return conf
 
     @staticmethod
-    def _from_stream(stream):
+    def load_stream(stream):
         return yaml.load(stream)
 
     def merge(self, additions):

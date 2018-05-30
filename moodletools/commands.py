@@ -14,16 +14,6 @@ import moodletools.course
 logger = logging.getLogger(__name__)
 
 
-def _auto_start(config):
-    """ Connect to Moodle and create the course using command-line/config"""
-    logging.info("Logging into Moodle")
-    call = config.login_callable()
-    moodle = call()
-    moodle.cache = config.cache_location
-    course = moodle.course(config.course)
-    return moodle, course
-
-
 def resource_id(args, config):
     if args.id:
         return args.id
@@ -74,7 +64,7 @@ class Gradebook(AbstractCommand):
         """
         logging.debug("Gradebook tools")
         print(args)
-        _, c = _auto_start(config)
+        _, c = moodletools.config.auto_start(config)
 
         # actions are mutually exclusive
         if args.fetch:
@@ -139,7 +129,7 @@ class CoursePage(AbstractCommand):
         """
         logging.debug("Course page tools")
         print(args)
-        _, c = _auto_start(config)
+        _, c = moodletools.config.auto_start(config)
 
         # actions are mutually exclusive
         if args.list_all:
@@ -195,7 +185,7 @@ class Assignment(AbstractCommand):
         """
         logging.debug("Assignment tools")
         print(args)
-        _, c = _auto_start(config)
+        _, c = moodletools.config.auto_start(config)
 
         rid = resource_id(args, config)
         filename = args.status
@@ -248,7 +238,7 @@ class Database(AbstractCommand):
         """
         logging.debug("Database tools")
         print(args)
-        _, c = _auto_start(config)
+        _, c = moodletools.config.auto_start(config)
 
         rid = resource_id(args, config)
 
@@ -304,7 +294,7 @@ class Label(AbstractCommand):
         """
         logging.debug("Page tools")
         print(args)
-        _, c = _auto_start(config)
+        _, c = moodletools.config.auto_start(config)
 
         # actions are mutually exclusive
         if args.create:
@@ -367,7 +357,7 @@ class Page(AbstractCommand):
         """
         logging.debug("Page tools")
         print(args)
-        _, c = _auto_start(config)
+        _, c = moodletools.config.auto_start(config)
 
         # actions are mutually exclusive
         if args.create:
@@ -424,7 +414,7 @@ class Resource(AbstractCommand):
         """
         logging.debug("Resource (file) tools")
         print(args)
-        _, c = _auto_start(config)
+        _, c = moodletools.config.auto_start(config)
 
         rid = resource_id(args, config)
 
