@@ -44,13 +44,13 @@ def find_config_filenames(start_directory=os.path.curdir, levels=2, home=True):
     if home:
         search.append(os.path.expanduser("~/"))
 
-    files = []
+    filenames = []
 
     for d in search:
-        files.extend(glob.glob(os.path.join(d, '.moodletools.yaml')))
+        filenames.extend(glob.glob(os.path.join(d, '.moodletools.yaml')))
 
-    logger.debug("Config files: %s", ", ".join(files))
-    return files
+    logger.debug("Config files: %s", ", ".join(filenames))
+    return filenames
 
 
 def parse_login_callable(login_spec):
