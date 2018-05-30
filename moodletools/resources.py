@@ -319,7 +319,9 @@ class Assignment(AbstractResource):
 
         # raw grade column is "GradeXX / YY"
         df['Grade'] = pandas.to_numeric(
-            df.Grade.str.replace(gradere, lambda m: m.group(1)))
+            df.Grade.str.replace(gradere, lambda m: m.group(1)),
+            errors='coerce',
+        )
 
         return df
 
