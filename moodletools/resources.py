@@ -249,6 +249,8 @@ class Assignment(AbstractResource):
         """ read an html table of assignment data and extract information """
         dfs = pandas.read_html(str(table))
         df = dfs[0]
+        # moodle pads the end of the table with empty rows
+        df = df.dropna(how='all', axis=0)
 
         cols = list(df.columns)
 
