@@ -88,6 +88,9 @@ class MtConfig:
             data = {}
         self.data = data
 
+    def get(self, *args, **kwargs):
+        return self.data.get(*args, **kwargs)
+
     def load_default(self):
         filename = os.path.join(os.path.dirname(__file__),
                                 'defaultconfig.yaml')
