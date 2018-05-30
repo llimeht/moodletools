@@ -161,6 +161,12 @@ class Assignment(AbstractCommand):
             help="tools for interacting with assignment resources"
         )
 
+        parser.add_argument(
+            '--id', metavar="ID",
+            help='download the resource with the specified Id',
+            required=True,
+        )
+
         # Mutually exclusive options for page
         group = parser.add_mutually_exclusive_group(required=True)
 
@@ -188,18 +194,19 @@ class Assignment(AbstractCommand):
         _, c = moodletools.config.auto_start(config)
 
         rid = resource_id(args, config)
-        filename = args.status
         assgt = c.assignment(rid)
 
         # actions are mutually exclusive
         if args.status:
             logging.debug("Assignment status")
-            df = assgt.get_submission_status(config.force)
+            df = assgt.get_submission_status(config.cache_force)
+            filename = args.status
             logging.debug("Writing to file '%s'", filename)
             df.to_excel(filename)
-        elif args.status:
+        elif args.grades:
             logging.debug("Assignment grades")
-            df = assgt.get_submission_grades(config.force)
+            df = assgt.get_grades(config.cache_force)
+            filename = args.grades
             logging.debug("Writing to file '%s'", filename)
             df.to_excel(filename)
 
