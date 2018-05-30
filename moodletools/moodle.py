@@ -207,7 +207,7 @@ class Moodle:
             for t in textareas:
                 n = t.get('name')
                 v = t.contents
-                payload[n] = v[0] if len(v) else ""
+                payload[n] = v[0] if v else ""
 
             payload = payload_filter(payload)
 
