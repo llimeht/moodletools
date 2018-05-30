@@ -233,6 +233,7 @@ class Database(AbstractCommand):
         parser.add_argument(
             '--id', metavar="ID",
             help='download the resource with the specified Id',
+            required=True,
         )
         return parser
 
@@ -408,6 +409,7 @@ class Resource(AbstractCommand):
         parser.add_argument(
             '--id', metavar="ID",
             help='download the resource with the specified Id',
+            required=True,
         )
 
         return parser
