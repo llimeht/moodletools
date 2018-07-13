@@ -187,6 +187,12 @@ class Moodle:
             logger.debug("Fetching resource form: %s", form_url)
             response_form = self.session.get(form_url)
 
+            logger.debug("Fetching resource form returned: %d",
+                         response_form.status_code)
+
+            if response_form.status_code == 404:
+                raise ValueError("Resource form not found")
+
             # find all of the fields in the form to send back
             soup = bs4.BeautifulSoup(response_form.text, "html.parser")
             if form_name is not None:
@@ -211,8 +217,15 @@ class Moodle:
 
             payload = payload_filter(payload)
 
+            logger.debug("Fetching resource: %s", resource_url)
             response_resource = self.session.post(
                 resource_url, data=payload, files=files)
+
+            logger.debug("Fetching resource returned: %d",
+                         response_resource.status_code)
+
+            if response_resource.status_code == 404:
+                raise ValueError("Resource not found")
 
             cache.save(response_resource)
             return response_resource
