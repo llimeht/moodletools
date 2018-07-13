@@ -452,6 +452,7 @@ class Workshep(AbstractResource):
         r"'(?P<subid>\d+)' .+ '(?P<cmid>\d+)'"
     _submission_url = "{base}mod/workshep/submission.php?" \
         "cmid={cmid}&id={subid}"
+    _allocation_url = "{base}mod/workshep/allocation/download.php?id={id}"
 
     def get_status(self, filename_submissions, filename_assessments):
         """ obtain status data on a Workshop (UNSW) aka workshep activity """
@@ -534,6 +535,37 @@ class Workshep(AbstractResource):
 
         return df_submissions, df_assessments
 
+    def get_allocations(self, filename):
+
+        mapping = {
+            'base': self.course.moodle.base_url,
+            'id': self.id,
+        }
+        url = self._allocation_url.format(**mapping)
+
+        rawdatafilename = filename_allocations + ".csv"
+
+        resource = self.course.moodle.fetch(
+            url,
+            'workshop-allocations-%d' % self.id
+        )
+
+        allocations = []
+        for line in resource.text.splitlines():
+            ids = line.split(',')
+            marker = ids[0]
+            for student in ids[1:]:
+                allocations.append({
+                        'marker': marker,
+                        'student': student
+                        })
+
+        df = pandas.DataFrame(allocations)
+
+        if filename:
+            df.to_pickle(filename_allocations)
+
+        return df
 
 class Forum(AbstractResource):
     """ Class to represent a Forum within a course
