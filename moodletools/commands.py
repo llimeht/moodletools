@@ -146,6 +146,18 @@ class CoursePage(AbstractCommand):
                 logging.debug("Saving to %s", filename)
                 df = moodletools.course.to_dataframe(activities)
                 df.to_excel(filename)
+        elif args.show_all:
+            logging.debug("Showing all resources")
+            activities = c.unhide_all()
+        elif args.hide_all:
+            logging.debug("Hiding all resources")
+            activities = c.hide_all()
+        elif args.hide:
+            raise NotImplementedError
+        elif args.show:
+            raise NotImplementedError
+
+        raise ValueError("Unknown action for subcommand")
 
 
 class Assignment(AbstractCommand):
